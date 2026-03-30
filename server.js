@@ -1,29 +1,21 @@
+require('dotenv').config();
 const console = require('console');
 const express = require('express');
 const http = require('http');
 const {Server}=require('socket.io');
-const mongoose= require('mongoose');
+const connectDB = require('./config/db');
+const callRoutes = require('./routes/callRoutes');
 const app =express();
 const server = http.createServer(app)
 // congigure socket with allowing call from any where cors
 const io = new Server(server,{
     cors :{origin : "*"}
 });
-  mongoose.connect('mongodb://127.0.0.1:3000/chatApp');
  
-const callSchema = new mongoose.Schema({
-      callerId:String,
-      receiverId:String,
-      status:{
-          type:String,
-          enum:['calling','completed',,'missed','declined'],
-          default:'calling'
-      },
-      duration:Number,
-  }
-  );
-  
-const CallLog = mongoose.model('CallLog',callSchema);
+ connectDB();
+app.use(express.json());
+app.use('/api/calls',callRoutes);
+ 
  
 let users={};
 io.on('connection',(socket)=>{
@@ -78,12 +70,18 @@ socket.on('disconnect',()=>{
     console.log('User disconnected');
 });
 
-
+socket.on('end-call', async(data)=>{
+   const savedLog = await CallLog.create({
+    callerId:data.callerId,
+    receiverId:data.receiverId,
+    status:data.status['completed']
+   })
+});
 }
 
 );
 
-server.listen(3000,'0.0.0.0',()=>{
-    console.log('Server is running on port 3000');
-
+const PORT = process.env.PORT || 3000;
+server.listen(PORT,'0.0.0.0',()=>{
+    console.log(`Server is running on port ${PORT}`);
 });

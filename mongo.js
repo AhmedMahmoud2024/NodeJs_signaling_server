@@ -36,10 +36,12 @@ startTime :new Date()
 */
 application.get('/call-history/:userId',async(req,res)=>{
     const history= await CallLog.find({
-  receiverId: req.params.userId
+  $or:[{callerId: req.params.userId},
+     {receiverId: req.params.userId}]
     }).sort({startTime:-1});
-    res.json(history);
-})
+    res.status(200).json(history);
+}
+)
 
 socket.on('end-call', async(data)=>{
    const savedLog = await CallLog.create({
