@@ -1,3 +1,4 @@
+const jwt =require('jsonwebtoken');
 require('dotenv').config();
 const console = require('console');
 const express = require('express');
@@ -5,6 +6,15 @@ const http = require('http');
 const {Server}=require('socket.io');
 const connectDB = require('./config/db');
 const callRoutes = require('./routes/callRoutes');
+const {
+  handleMakeCall,
+  handleEndCall,
+  handleMissedCall,
+  handleStoreUser,
+  handleTestConnection,
+  handleDisconnect
+} = require('./socket/callHandlers');
+
 const app =express();
 const server = http.createServer(app)
 // congigure socket with allowing call from any where cors
@@ -13,6 +23,30 @@ const io = new Server(server,{
 });
  
  connectDB();
+  app.get('/get-stream-token',async(req,res)=>{
+  const userId= req.query.userId;
+  const apiSecret= process.env.STREAM_API_SECRET
+  if(!userId){
+     return res.status(400).json({success:false,message:'User ID is required'});
+  }
+ try{
+  const token = jwt.sign({
+    user_id: userId,
+    exp:Math.floor(Date.now() /1000) + (60*60)
+  },
+  apiSecret,
+  {
+     algorithm : 'HS256'
+  },
+ );
+ res.json({token:token});
+ }catch(error){
+     res.status(500).json({
+         error:error.message
+     });
+ }
+ 
+  });
 app.use(express.json());
 app.use('/api/calls',callRoutes);
  
@@ -21,65 +55,20 @@ let users={};
 io.on('connection',(socket)=>{
     console.log(`A user connected: ${socket.id}`);
 
-      socket.on('make-call',async(data)=>{
-      try{
-    const newCall= new CallLog({
-  callerId:data.callerId,
-  receiverId:data.receiverId,
-  status:'calling',
-  startTime :new Date()
-      });   
+    // Store user ID to socket mapping
+    socket.on('store_user', handleStoreUser(socket, users));
 
-     await  newCall.save()
-      console.log('call log saved successfully');
-  }catch(error){
-      console.error('Error saving call log:',error);
-  }
-  }
-  
-  );
+    // Call management handlers
+    socket.on('make-call', handleMakeCall(io, socket, users));
+    socket.on('end-call', handleEndCall(io, socket, users));
+    socket.on('missed-call', handleMissedCall(io, socket, users));
 
- 
+    // Test connection handler
+    socket.on('test-connection', handleTestConnection(socket));
 
- 
-  
- 
-  
-//user store
-socket.on('store_user',(userId)=>{
-users[userId]=socket.id;
-console.log(`User stored: ${userId} is online`);
+    // Cleanup on disconnect
+    socket.on('disconnect', handleDisconnect(socket, users));
 });
-//signaling pass 
-socket.on('make-call',(data)=>{
-const receiverSocketId=users[data.receiverId];
-if(receiverSocketId){
-io.to(receiverSocketId).emit('incoming-call',data);
-}
-});
-
-socket.on('test-connection',(data)=>{
-    console.log('message from Flutter:',data.message);
-});
-/*
-socket.on('test-response',{
-    reply:'Server Says I hear you very clear'
-});
-*/
-socket.on('disconnect',()=>{
-    console.log('User disconnected');
-});
-
-socket.on('end-call', async(data)=>{
-   const savedLog = await CallLog.create({
-    callerId:data.callerId,
-    receiverId:data.receiverId,
-    status:data.status['completed']
-   })
-});
-}
-
-);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT,'0.0.0.0',()=>{
