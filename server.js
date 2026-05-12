@@ -15,6 +15,7 @@ const {
   handleDisconnect
 } = require('./socket/callHandlers');
 
+const aiRoutes = require('./routes/aiRoutes');
 const app =express();
 const server = http.createServer(app)
 // congigure socket with allowing call from any where cors
@@ -49,8 +50,8 @@ const io = new Server(server,{
   });
 app.use(express.json());
 app.use('/api/calls',callRoutes);
- 
- 
+app.use('/api/ai',aiRoutes);
+
 let users={};
 io.on('connection',(socket)=>{
     console.log(`A user connected: ${socket.id}`);
